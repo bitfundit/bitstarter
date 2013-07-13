@@ -24,7 +24,11 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
-var HTMLFILE_DEFAULT = "index.html";
+var rest = require('restler');
+//var HTMLFILE_DEFAULT = "index.html";
+var HTMLFILE_DEFAULT = false;
+var HTMLURL_DEFAULT = false;
+//var HTMLURL_DEFAULT = "http://mysterious-lake-4926.herokuapp.com/";
 var CHECKSFILE_DEFAULT = "checks.json";
 
 var assertFileExists = function(infile) {
@@ -39,6 +43,12 @@ var assertFileExists = function(infile) {
 var cheerioHtmlFile = function(htmlfile) {
     return cheerio.load(fs.readFileSync(htmlfile));
 };
+
+var cheerioHtmlUrl = function(htmlfile) {
+    var buffer = new Buffer (htmlfile,"utf-8");
+    return cheerio.load(buffer);
+};
+
 
 var loadChecks = function(checksfile) {
     return JSON.parse(fs.readFileSync(checksfile));
@@ -55,6 +65,21 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
+var checkHtmlUrl = function(htmlfile, checksfile, callback) {
+    var checks = loadChecks(checksfile).sort();
+    rest.get(htmlfile).on("complete", function (data){
+    var out = {};
+    $ = cheerioHtmlUrl(data);
+    for(var ii in checks) {
+        var present = $(checks[ii]).length > 0;
+        out[checks[ii]] = present;
+    }
+    callback(out);
+
+	});
+};
+
+
 var clone = function(fn) {
     // Workaround for commander.js issue.
     // http://stackoverflow.com/a/6772648
@@ -64,12 +89,35 @@ var clone = function(fn) {
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
-        .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-f, --file [html_file]', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url [html_url]', 'URL to get index.html', HTMLURL_DEFAULT)
         .parse(process.argv);
+
+if (program.file) {
+
     var checkJson = checkHtmlFile(program.file, program.checks);
     var outJson = JSON.stringify(checkJson, null, 4);
     console.log(outJson);
+
+        } else if (program.url) {
+
+            var checkJson = checkHtmlUrl(program.url, program.checks, function (result){
+
+		var outJson = JSON.stringify(result, null, 4);
+		console.log(outJson);
+
+	    });
+
+        } else {
+
+               console.log("No file or URL provided. Exiting.");
+               process.exit(1);
+           };
+
+
 } else {
+
+    HTMLFILE_DEFAULT = "index.html";
     exports.checkHtmlFile = checkHtmlFile;
 
 }
